@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JustTranslate — мгновенный переводчик</title>
+  <meta name="description" content="Лёгкий веб‑переводчик: автоопределение языка, озвучка, история, шаринг. Работает на iPhone (как PWA)." />
+  <style>
+    :root{
+      --bg:#0f1115; --card:#151922; --muted:#8b95a7; --border:#222839; --accent:#3b82f6; --ok:#22c55e; --danger:#ef4444;
+      --radius:16px; --shadow:0 12px 30px rgba(0,0,0,.30);
+      --pad:14px; --gap:12px; --font: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 800px at 10% -10%, #1b2333 0%, rgba(27,35,51,0) 60%), var(--bg); color:#e7ebf3; font-family:var(--font);}
+    .wrap{max-width:1100px;margin:0 auto;padding:18px;}
+    header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+    header .title{font-size:20px;font-weight:700;letter-spacing:.2px}
+    header .pill{font-size:12px;color:#cbd5e1;background:#0c1018;border:1px solid var(--border); padding:6px 8px;border-radius:999px}
+
+    .grid{display:grid;gap:var(--gap);grid-template-columns:1.1fr .9fr}
+    @media (max-width: 900px){ .grid{grid-template-columns:1fr} }
+
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card h3{margin:0 0 10px 0;font-size:14px;color:#cbd5e1}
+    .card .inner{padding:var(--pad)}
+
+    textarea,input,select{width:100%;background:#0f141c;border:1px solid var(--border); color:#e7ebf3; padding:12px;border-radius:12px; font: 16px/1.4 var(--font)}
+    textarea{resize:vertical; min-height:160px}
+    select{appearance:none}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .muted{color:var(--muted); font-size:12px}
+
+    .btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);border:none;color:#fff;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600}
+    .btn.secondary{background:#21283b;color:#dbe3f2;border:1px solid var(--border)}
+    .btn.ghost{background:transparent;border:1px dashed var(--border); color:#cbd5e1}
+    .btn:disabled{opacity:.5; cursor:not-allowed}
+    .danger{color:var(--danger)}
+
+    .stack{display:flex;gap:10px;flex-wrap:wrap}
+    .split{display:grid;grid-template-columns:1fr auto 1fr; gap:8px; align-items:center}
+    .divider{height:1px;background:linear-gradient(90deg, transparent, #263148, transparent); margin:10px 0}
+
+    .badge{font-size:12px;color:#cbd5e1;background:#0c1018;border:1px solid var(--border); padding:4px 8px;border-radius:999px; white-space:nowrap}
+
+    .history{display:grid; gap:8px}
+    .h-item{padding:10px;border:1px solid var(--border);border-radius:12px;background:#0d1219; cursor:pointer}
+    .h-item .src{color:#a9b4c7; font-size:12px; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .h-item .dst{font-size:14px}
+
+    .footer{margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#96a3b8}
+    .footer a{color:#c6d3f0}
+
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0c1018;border:1px solid var(--border); color:#dce5f7; padding:10px 12px;border-radius:999px;box-shadow:var(--shadow);display:none}
+
+    /* tiny spinner */
+    .spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.22); border-top-color:#fff; animation:spin .9s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .topbar{display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px}
+    .topbar .left{display:flex; gap:8px; align-items:center}
+
+    .link-like{border:none;background:none;color:#9cc2ff;cursor:pointer;text-decoration:underline;padding:0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">JustTranslate</div>
+      <div class="pill">web · iPhone · Android</div>
+      <span class="badge" id="installHint" style="display:none">Добавь на экран «Домой»</span>
+      <span class="badge" id="sttBadge" style="display:none">Диктовка доступна</span>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: Controls -->
+      <div class="card">
+        <div class="inner">
+          <div class="topbar">
+            <h3>Исходный текст</h3>
+            <div class="row">
+              <select id="from"></select>
+              <button class="btn secondary" id="swap" title="Поменять языки местами">⇄</button>
+              <select id="to"></select>
+            </div>
+          </div>
+
+          <textarea id="src" placeholder="Вставь или надиктуй текст…"></textarea>
+
+          <div class="divider"></div>
+
+          <div class="stack">
+            <button class="btn" id="translateBtn"><span id="tIcon">Перевести</span></button>
+            <button class="btn secondary" id="micBtn" disabled>🎤 Диктовать</button>
+            <button class="btn secondary" id="clearBtn">Очистить</button>
+            <button class="btn ghost" id="settingsBtn">Настройки</button>
+          </div>
+          <p class="muted" style="margin-top:8px">Быстрые клавиши: Ctrl/Cmd+Enter — перевести. История — справа.</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: Result + History -->
+      <div class="card">
+        <div class="inner">
+          <div class="topbar">
+            <h3>Перевод</h3>
+            <div class="row">
+              <button class="btn secondary" id="copyBtn">Копировать</button>
+              <button class="btn secondary" id="speakBtn">🔊 Озвучить</button>
+              <button class="btn secondary" id="shareBtn">Поделиться</button>
+            </div>
+          </div>
+
+          <textarea id="dst" readonly placeholder="Здесь появится перевод…" style="min-height:140px"></textarea>
+
+          <div class="divider"></div>
+
+          <h3>История (локально)</h3>
+          <div class="history" id="history"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>
+        <span class="muted">Провайдер:</span> <span id="providerName" class="badge">—</span>
+        <button class="link-like" id="switchProvider">сменить</button>
+      </div>
+      <div class="muted">Сделано для тебя ❤️  · Сохраняется только на устройстве</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+// ====== Languages
+const LANGS = [
+  {code:'auto', name:'Авто'},
+  {code:'en', name:'English'},
+  {code:'ru', name:'Русский'},
+  {code:'es', name:'Español'},
+  {code:'de', name:'Deutsch'},
+  {code:'fr', name:'Français'},
+  {code:'it', name:'Italiano'},
+  {code:'pt', name:'Português'},
+  {code:'pl', name:'Polski'},
+  {code:'nl', name:'Nederlands'},
+  {code:'ja', name:'日本語'},
+  {code:'zh', name:'中文'},
+];
+
+// ====== Providers
+const Providers = {
+  mymemory: {
+    label: 'MyMemory (бесплатно, без ключа)',
+    async translate({text, from, to}){
+      const params = new URLSearchParams({
+        q: text, langpair: `${from==='auto'?'auto':from}|${to}`
+      });
+      const url = `https://api.mymemory.translated.net/get?${params}`;
+      const r = await fetch(url);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      const out = (j && j.responseData && j.responseData.translatedText) || '';
+      // decode HTML entities
+      const txt = document.createElement('textarea');
+      txt.innerHTML = out; // browser decodes
+      return txt.value;
+    }
+  },
+  libre: {
+    label: 'LibreTranslate (публичные узлы, без ключа)',
+    endpoints: [
+      'https://libretranslate.com/translate',
+      'https://translate.mentality.rip/translate',
+      'https://libretranslate.de/translate'
+    ],
+    async translate({text, from, to}){
+      const body = { q:text, source: from==='auto'?'auto':from, target: to, format: 'text' };
+      let lastErr;
+      for (const ep of this.endpoints){
+        try{
+          const r = await fetch(ep, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          if(!r.ok) throw new Error('HTTP '+r.status);
+          const j = await r.json();
+          if (j && j.translatedText) return j.translatedText;
+          if (j && j[0] && j[0].translatedText) return j[0].translatedText;
+        }catch(e){ lastErr = e; }
+      }
+      throw lastErr || new Error('LibreTranslate failed');
+    }
+  },
+  deepl: {
+    label: 'DeepL (лучшее качество, нужен ключ)',
+    requiresKey: true,
+    async translate({text, from, to, key}){
+      if(!key) throw new Error('Нужен API‑ключ DeepL');
+      const params = new URLSearchParams();
+      params.append('text', text);
+      params.append('target_lang', to.toUpperCase());
+      if (from !== 'auto') params.append('source_lang', from.toUpperCase());
+      const r = await fetch('https://api-free.deepl.com/v2/translate', {
+        method:'POST',
+        headers:{ 'Authorization': 'DeepL-Auth-Key '+key, 'Content-Type':'application/x-www-form-urlencoded' },
+        body: params
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      return j.translations && j.translations[0] && j.translations[0].text || '';
+    }
+  }
+};
+
+// ====== State
+const $ = sel => document.querySelector(sel);
+const els = { from:$('#from'), to:$('#to'), src:$('#src'), dst:$('#dst'), swap:$('#swap'), translateBtn:$('#translateBtn'),
+  tIcon:$('#tIcon'), micBtn:$('#micBtn'), copyBtn:$('#copyBtn'), speakBtn:$('#speakBtn'), shareBtn:$('#shareBtn'),
+  history:$('#history'), toast:$('#toast'), providerName:$('#providerName'), switchProvider:$('#switchProvider'),
+  clearBtn:$('#clearBtn'), settingsBtn:$('#settingsBtn'), sttBadge:$('#sttBadge'), installHint:$('#installHint') };
+
+let state = {
+  provider: localStorage.getItem('jt_provider') || 'mymemory',
+  deeplKey: localStorage.getItem('jt_deepl_key') || '',
+  history: JSON.parse(localStorage.getItem('jt_history')||'[]').slice(0,100)
+};
+
+// ====== UI init
+function fillLangs(){
+  function opt(tag){ const o = document.createElement('option'); o.value=tag.code; o.textContent=tag.name; return o; }
+  LANGS.forEach(l=> els.from.appendChild(opt(l)));
+  LANGS.filter(l=>l.code!=='auto').forEach(l=> els.to.appendChild(opt(l)));
+  els.from.value = localStorage.getItem('jt_from') || 'auto';
+  els.to.value = localStorage.getItem('jt_to') || 'en';
+}
+
+function renderHistory(){
+  els.history.innerHTML = '';
+  state.history.forEach((item, idx)=>{
+    const div = document.createElement('div'); div.className='h-item';
+    div.innerHTML = `<div class="src">${item.from} → ${item.to} · ${escapeHtml(item.src).slice(0,120)}</div>
+                     <div class="dst">${escapeHtml(item.dst).slice(0,180)}</div>`;
+    div.onclick = ()=>{ els.src.value=item.src; els.from.value=item.from; els.to.value=item.to; els.dst.value=item.dst; };
+    els.history.appendChild(div);
+  });
+}
+
+function escapeHtml(s){ return s.replace(/[&<>\"]/g, ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch])); }
+
+function toast(msg){ els.toast.textContent=msg; els.toast.style.display='block'; clearTimeout(window._toast); window._toast=setTimeout(()=>els.toast.style.display='none', 1800); }
+
+function setProvider(p){ state.provider=p; localStorage.setItem('jt_provider', p); els.providerName.textContent = Providers[p].label; }
+
+// ====== Translate
+async function doTranslate(){
+  const text = els.src.value.trim();
+  if(!text){ toast('Введите текст'); return; }
+  const from = els.from.value; const to = els.to.value; if (from===to && from!=='auto'){ toast('Языки совпадают'); }
+  localStorage.setItem('jt_from', from); localStorage.setItem('jt_to', to);
+
+  els.translateBtn.disabled = true; els.tIcon.innerHTML = '<span class="spinner"></span>';
+  try{
+    const provider = Providers[state.provider] || Providers.mymemory;
+    const out = await provider.translate({ text, from, to, key: state.deeplKey });
+    els.dst.value = out;
+    // save history
+    state.history.unshift({src:text, dst:out, from, to, ts:Date.now()});
+    state.history = state.history.slice(0,100);
+    localStorage.setItem('jt_history', JSON.stringify(state.history));
+    renderHistory();
+  }catch(e){ console.error(e); toast('Ошибка перевода'); }
+  finally{ els.translateBtn.disabled=false; els.tIcon.textContent='Перевести'; }
+}
+
+// ====== Speech Recognition (if available)
+let rec; // recognition instance
+(function initSTT(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ els.micBtn.disabled = true; els.micBtn.title = 'Диктовка недоступна в этом браузере'; return; }
+  els.sttBadge.style.display = 'inline-flex';
+  rec = new SR(); rec.lang = 'ru-RU'; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.onresult = (ev)=>{ const t = ev.results[0][0].transcript; els.src.value = (els.src.value+" "+t).trim(); };
+  rec.onerror = ()=> toast('Не удалось распознать речь');
+  els.micBtn.disabled = false;
+})();
+
+// ====== TTS
+function speak(text, lang){
+  if(!('speechSynthesis' in window)) { toast('Озвучка недоступна'); return; }
+  const u = new SpeechSynthesisUtterance(text); u.lang = (lang||'en').slice(0,2);
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+
+// ====== Settings small modal (key/provider)
+function openSettings(){
+  const curr = state.provider; const label = Providers[curr].label; const needKey = Providers[curr].requiresKey;
+  const key = state.deeplKey;
+  const dlg = document.createElement('dialog');
+  dlg.style.border='1px solid var(--border)'; dlg.style.background='#0c1018'; dlg.style.color='#e7ebf3'; dlg.style.borderRadius='14px'; dlg.style.padding='16px'; dlg.innerHTML = `
+    <form method="dialog" style="display:grid; gap:12px; min-width:280px">
+      <h3 style="margin:0">Настройки</h3>
+      <label class="muted">Провайдер</label>
+      <select id="pSel">${Object.entries(Providers).map(([k,v])=>`<option value="${k}" ${k===curr?'selected':''}>${v.label}</option>`).join('')}</select>
+      <div id="keyWrap" style="display:${needKey?'block':'none'}">
+        <label class="muted">DeepL API Key</label>
+        <input id="keyInp" placeholder="вставь ключ" value="${key||''}" />
+        <p class="muted">Ключ хранится локально в браузере</p>
+      </div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn secondary" value="cancel">Отмена</button>
+        <button class="btn" value="ok">Сохранить</button>
+      </div>
+    </form>`;
+  dlg.querySelector('#pSel').onchange = (e)=>{
+    const need = Providers[e.target.value].requiresKey;
+    dlg.querySelector('#keyWrap').style.display = need ? 'block' : 'none';
+  }
+  dlg.addEventListener('close', ()=>{
+    if (dlg.returnValue==='ok'){
+      const p = dlg.querySelector('#pSel').value; setProvider(p);
+      if (Providers[p].requiresKey){ state.deeplKey = dlg.querySelector('#keyInp').value.trim(); localStorage.setItem('jt_deepl_key', state.deeplKey); }
+      toast('Сохранено');
+    }
+    dlg.remove();
+  });
+  document.body.appendChild(dlg); dlg.showModal();
+}
+
+// ====== Events
+els.translateBtn.onclick = doTranslate;
+els.src.addEventListener('keydown', e=>{ if((e.metaKey||e.ctrlKey) && e.key==='Enter'){ doTranslate(); }});
+els.swap.onclick = ()=>{ const a=els.from.value; els.from.value=els.to.value==='auto'?'en':els.to.value; els.to.value=a==='auto'?'en':a; };
+els.micBtn.onclick = ()=>{ if (!rec) return; try{ rec.start(); }catch(_){} };
+els.copyBtn.onclick = async ()=>{ try{ await navigator.clipboard.writeText(els.dst.value||''); toast('Скопировано'); }catch(_){ toast('Не удалось скопировать'); } };
+els.speakBtn.onclick = ()=> speak(els.dst.value||'', els.to.value);
+els.clearBtn.onclick = ()=>{ els.src.value=''; els.dst.value=''; };
+els.shareBtn.onclick = async ()=>{
+  const text = els.dst.value || '';
+  if (navigator.share){ try{ await navigator.share({ text }); } catch(_){} }
+  else { toast('Поделиться не поддерживается'); }
+};
+els.switchProvider.onclick = openSettings; els.settingsBtn.onclick = openSettings;
+
+// ====== Install hint (PWA)
+function pwaSetup(){
+  // manifest from blob
+  const manifest = { name:'JustTranslate', short_name:'Translate', start_url:'./', display:'standalone', background_color:'#0f1115', theme_color:'#0f1115', icons:[] };
+  const murl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'}));
+  const link = document.createElement('link'); link.rel='manifest'; link.href=murl; document.head.appendChild(link);
+  // service worker from blob
+  const swCode = `self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('jt-v1').then(c=>c.addAll(['./'])))});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!=='jt-v1').map(k=>caches.delete(k)))))});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request).then(r=>r||caches.match('./'))))});`;
+  if('serviceWorker' in navigator){
+    const blob = new Blob([swCode], {type:'text/javascript'});
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }
+  // iOS add to home
+  const isIOS = /iphone|ipod|ipad/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isIOS && !isStandalone){ els.installHint.style.display='inline-flex'; }
+}
+
+// ====== Init
+fillLangs();
+setProvider(state.provider);
+renderHistory();
+pwaSetup();
+
+</script>
+</body>
+</html>
